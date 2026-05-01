@@ -4,8 +4,8 @@
 // ============================================================
 
 // --- Supabase ---
-const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://mbccojoeppruespghlne.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1iY2Nvam9lcHBydWVzcGdobG5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MzQ0OTksImV4cCI6MjA5MzIxMDQ5OX0.45lW0vU1b5pACy9NgHvhSqIFd8cDRx2CM8gviIdUT08';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- Stripe ---
