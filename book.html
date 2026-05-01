@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Details — NexusBooks</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .book-detail-layout { display: grid; grid-template-columns: 400px 1fr; gap: 60px; margin-top: 40px; }
+    .book-sidebar { position: sticky; top: calc(var(--nav-h) + 20px); height: fit-content; }
+    .book-detail-cover { width: 100%; aspect-ratio: 2/3; border-radius: var(--r-lg); overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid var(--border); }
+    .book-detail-cover img { width: 100%; height: 100%; object-fit: cover; }
+    
+    .book-main-info { display: flex; flex-direction: column; gap: 24px; }
+    .book-header-top { display: flex; flex-direction: column; gap: 8px; }
+    .book-category { color: var(--purple); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.85rem; }
+    .book-title { font-size: 2.5rem; }
+    .book-meta { display: flex; align-items: center; gap: 20px; color: var(--text-3); font-size: 0.9rem; }
+    .book-creator { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 500; }
+    .book-creator img { width: 28px; height: 28px; border-radius: 50%; }
+
+    .book-price-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 32px; display: flex; flex-direction: column; gap: 20px; }
+    .price-value { font-size: 2rem; font-weight: 700; color: var(--text); }
+    
+    .book-tabs { border-bottom: 1px solid var(--border); display: flex; gap: 40px; margin-top: 40px; }
+    .tab-btn { padding: 12px 0; font-weight: 600; color: var(--text-3); border-bottom: 2px solid transparent; transition: var(--tr); }
+    .tab-btn.active { color: var(--purple); border-bottom-color: var(--purple); }
+    
+    .ai-summary-card { background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(6, 182, 212, 0.1)); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--r-md); padding: 24px; margin-top: 30px; position: relative; overflow: hidden; }
+    .ai-summary-card::before { content: "🤖 AI Summary"; position: absolute; top: 12px; right: 16px; font-size: 0.75rem; font-weight: 700; color: var(--purple); opacity: 0.8; }
+    .ai-summary-text { color: var(--text); line-height: 1.8; font-style: italic; }
+
+    .review-item { padding: 24px 0; border-bottom: 1px solid var(--border); display: flex; gap: 20px; }
+    .review-user-img { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; }
+    .review-content { display: flex; flex-direction: column; gap: 8px; }
+    .review-user-name { font-weight: 600; }
+    .review-date { font-size: 0.8rem; color: var(--text-3); }
+
+    @media (max-width: 900px) {
+      .book-detail-layout { grid-template-columns: 1fr; }
+      .book-sidebar { position: relative; top: 0; }
+      .book-detail-cover { max-width: 300px; margin: 0 auto; }
+    }
+  </style>
+</head>
+<body>
+  <header id="navbar"></header>
+  <div id="toast-container"></div>
+
+  <main class="page">
+    <section class="section">
+      <div class="container" id="book-content">
+        <div class="loader"><div class="loader__ring"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/books.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/reader.js"></script>
+  <script src="js/payments.js"></script>
+  <script>
+    async function init() {
+      UI.renderNavbar();
+      
+      const params = new URLSearchParams(window.location.search);
+      const bookId = params.get('id');
+      if (!bookId) { window.location.href = ROUTES.home; return; }
+
+      try {
+        const book = await Books.fetchBook(bookId);
+        renderBook(book);
+        loadAIStats(book);
+        loadReviews(bookId);
+      } catch (e) {
+        document.getElementById('book-content').innerHTML = `
+          <div class="empty-state">
+            <span class="empty-state__icon">❌</span>
+            <p>Book not found or an error occurred.</p>
+            <a href="browse.html" class="btn btn--primary">Back to Browse</a>
+          </div>`;
+      }
+    }
+
+    function renderBook(book) {
+      const isOwner = Auth.user?.id === book.seller_id;
+      const content = document.getElementById('book-content');
+      
+      content.innerHTML = `
+        <div class="book-detail-layout">
+          <aside class="book-sidebar">
+            <div class="book-detail-cover">
+              <img src="${book.cover_url || 'https://via.placeholder.com/400x600/1a0533/8b5cf6?text=📚'}" alt="${book.title}" />
+            </div>
+          </aside>
+          
+          <div class="book-main-info">
+            <div class="book-header-top">
+              <span class="book-category">${book.category}</span>
+              <h1 class="book-title">${book.title}</h1>
+              <div class="book-meta">
+                <a href="profile.html?id=${book.profiles.id}" class="book-creator">
+                  <img src="${book.profiles.avatar_url}" alt="${book.profiles.username}" />
+                  <span>${book.profiles.username}</span>
+                </a>
+                <span>•</span>
+                <span>${UI.renderStars(book.rating_avg)}</span>
+                <span>•</span>
+                <span>${book.downloads || 0} Downloads</span>
+              </div>
+            </div>
+
+            <div class="book-price-box">
+              <div class="price-value">${UI.formatCurrency(book.price)}</div>
+              <div style="display: flex; gap: 12px;">
+                <button class="btn btn--primary btn--lg" style="flex: 1;" onclick="handlePurchase()">
+                  ${book.price > 0 ? 'Buy Now' : 'Claim Free'}
+                </button>
+                <button class="btn btn--ghost btn--lg" onclick="Reader.open('${book.preview_url}', '${book.title}')">
+                  👁️ Preview
+                </button>
+              </div>
+              <p class="text-muted" style="font-size: 0.85rem; text-align: center;">
+                ${book.price > 0 ? 'Secure payment via Stripe' : 'Instantly added to library'}
+              </p>
+            </div>
+
+            <div class="ai-summary-card" id="ai-summary-container">
+              <div class="loader" style="padding: 10px;"><div class="loader__ring" style="width:20px;height:20px;"></div></div>
+            </div>
+
+            <div class="book-tabs">
+              <button class="tab-btn active">Description</button>
+              <button class="tab-btn">Details</button>
+              <button class="tab-btn">Reviews</button>
+            </div>
+            
+            <div class="tab-content" style="padding-top: 20px;">
+              <p style="white-space: pre-line;">${book.description}</p>
+            </div>
+            
+            <div id="reviews-container" style="margin-top: 60px;">
+              <h3 style="margin-bottom: 24px;">Customer Reviews</h3>
+              <div id="reviews-list"></div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function loadAIStats(book) {
+      try {
+        const summary = await AI.getBookSummary(book.id, book.title, book.description);
+        document.getElementById('ai-summary-container').innerHTML = `
+          <p class="ai-summary-text">"${summary}"</p>`;
+      } catch (e) {
+        document.getElementById('ai-summary-container').style.display = 'none';
+      }
+    }
+
+    async function loadReviews(bookId) {
+      const list = document.getElementById('reviews-list');
+      try {
+        const reviews = await Books.fetchReviews(bookId);
+        if (reviews.length === 0) {
+          list.innerHTML = '<p class="text-muted">No reviews yet. Be the first!</p>';
+          return;
+        }
+        list.innerHTML = reviews.map(r => `
+          <div class="review-item">
+            <img src="${r.profiles.avatar_url}" class="review-user-img" />
+            <div class="review-content">
+              <div class="review-user-name">${r.profiles.username}</div>
+              <div>${UI.renderStars(r.rating)}</div>
+              <p>${r.body}</p>
+              <span class="review-date">${UI.formatDate(r.created_at)}</span>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        list.innerHTML = '<p class="text-muted">Could not load reviews.</p>';
+      }
+    }
+
+    async function handlePurchase() {
+      const params = new URLSearchParams(window.location.search);
+      const bookId = params.get('id');
+      const book = await Books.fetchBook(bookId);
+      
+      if (book.price === 0) {
+        await Payments.claimFree(book.id);
+      } else {
+        await Payments.buyBook(book);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

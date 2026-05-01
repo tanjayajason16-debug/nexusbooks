@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Creator Profile — NexusBooks</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .profile-hero { padding: 80px 24px; background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.15), transparent 70%); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+    .profile-avatar { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--purple); box-shadow: 0 0 30px var(--purple-glow); }
+    .profile-name { font-size: 2.2rem; margin-bottom: 4px; }
+    .profile-bio { max-width: 600px; color: var(--text-2); line-height: 1.6; }
+    .profile-stats { display: flex; gap: 40px; margin-top: 24px; padding: 16px 40px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill); }
+    .profile-stat-item { display: flex; flex-direction: column; gap: 4px; }
+    .stat-v { font-weight: 700; color: var(--text); font-size: 1.2rem; }
+    .stat-l { font-size: 0.75rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .profile-content { margin-top: 60px; }
+  </style>
+</head>
+<body>
+  <header id="navbar"></header>
+  <div id="toast-container"></div>
+
+  <main class="page">
+    <div id="profile-container">
+      <div class="loader"><div class="loader__ring"></div></div>
+    </div>
+
+    <section class="section section--sm container">
+      <h2 style="margin-bottom: 32px;">Published Books</h2>
+      <div class="books-grid" id="profile-books-grid">
+        <div class="loader"><div class="loader__ring"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/books.js"></script>
+  <script>
+    async function init() {
+      UI.renderNavbar();
+      
+      const params = new URLSearchParams(window.location.search);
+      const profileId = params.get('id');
+      if (!profileId) { window.location.href = ROUTES.home; return; }
+
+      try {
+        const profile = await Auth.getProfile(profileId);
+        const books = await Books.fetchSellerBooks(profileId);
+        
+        renderProfile(profile, books);
+        renderBooks(books);
+      } catch (e) {
+        document.getElementById('profile-container').innerHTML = `
+          <div class="empty-state">
+            <span class="empty-state__icon">👤</span>
+            <p>Profile not found.</p>
+          </div>`;
+      }
+    }
+
+    function renderProfile(profile, books) {
+      const container = document.getElementById('profile-container');
+      const sales = books.reduce((sum, b) => sum + (b.downloads || 0), 0);
+      const avgRating = books.length ? (books.reduce((sum, b) => sum + (b.rating_avg || 0), 0) / books.length).toFixed(1) : '0.0';
+
+      container.innerHTML = `
+        <div class="profile-hero">
+          <img src="${profile.avatar_url}" class="profile-avatar" alt="${profile.username}" />
+          <div>
+            <h1 class="profile-name">${profile.username}</h1>
+            <p class="profile-bio">${profile.bio || 'Sharing digital knowledge on NexusBooks.'}</p>
+          </div>
+          <div class="profile-stats">
+            <div class="profile-stat-item">
+              <span class="stat-v">${books.length}</span>
+              <span class="stat-l">Books</span>
+            </div>
+            <div class="profile-stat-item">
+              <span class="stat-v">${sales.toLocaleString()}</span>
+              <span class="stat-l">Sales</span>
+            </div>
+            <div class="profile-stat-item">
+              <span class="stat-v">${avgRating} ★</span>
+              <span class="stat-l">Avg. Rating</span>
+            </div>
+          </div>
+          ${Auth.user?.id === profile.id ? `<a href="studio.html" class="btn btn--ghost btn--sm" style="margin-top:20px;">⚙️ Edit Profile</a>` : ''}
+        </div>`;
+    }
+
+    function renderBooks(books) {
+      const grid = document.getElementById('profile-books-grid');
+      const publishedBooks = books.filter(b => b.is_published);
+      
+      if (publishedBooks.length === 0) {
+        grid.innerHTML = '<p class="text-muted" style="grid-column: 1/-1; text-align: center;">No published books yet.</p>';
+        return;
+      }
+
+      grid.innerHTML = publishedBooks.map(b => UI.renderBookCard(b)).join('');
+    }
+
+    init();
+  </script>
+</body>
+</html>

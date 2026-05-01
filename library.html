@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Library — NexusBooks</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 30px; margin-top: 40px; }
+    .library-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; transition: var(--tr); }
+    .library-card:hover { border-color: var(--purple); transform: translateY(-4px); }
+    .library-cover { aspect-ratio: 3/4; position: relative; overflow: hidden; }
+    .library-cover img { width: 100%; height: 100%; object-fit: cover; }
+    .library-info { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .library-title { font-weight: 600; font-size: 1.1rem; color: var(--text); }
+    
+    .progress-container { display: flex; flex-direction: column; gap: 6px; }
+    .progress-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-3); }
+    .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--grad); transition: width 0.4s ease; }
+
+    .library-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+    
+    .empty-library { grid-column: 1 / -1; padding: 100px 20px; }
+  </style>
+</head>
+<body>
+  <header id="navbar"></header>
+  <div id="toast-container"></div>
+
+  <main class="page">
+    <section class="section">
+      <div class="container">
+        <div class="section-header">
+          <h1 class="section-title">📦 My <span>Library</span></h1>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn--ghost btn--sm active">All Books</button>
+            <button class="btn btn--ghost btn--sm">Reading</button>
+            <button class="btn btn--ghost btn--sm">Finished</button>
+          </div>
+        </div>
+
+        <div class="library-grid" id="library-grid">
+          <div class="loader"><div class="loader__ring"></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/books.js"></script>
+  <script src="js/reader.js"></script>
+  <script src="js/payments.js"></script>
+  <script>
+    async function init() {
+      const user = await Auth.requireAuth();
+      if (!user) return;
+
+      UI.renderNavbar('library');
+      
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('success')) {
+        UI.showToast('Purchase successful! Book added to library.', 'success');
+      }
+
+      await loadLibrary();
+    }
+
+    async function loadLibrary() {
+      const grid = document.getElementById('library-grid');
+      try {
+        const books = await Books.fetchUserLibrary();
+        
+        if (books.length === 0) {
+          grid.innerHTML = `
+            <div class="empty-library">
+              <div class="empty-state">
+                <span class="empty-state__icon">📚</span>
+                <p>Your library is empty. Start exploring books!</p>
+                <a href="browse.html" class="btn btn--primary">Browse Books</a>
+              </div>
+            </div>`;
+          return;
+        }
+
+        // Load progress for each book
+        const booksWithProgress = await Promise.all(books.map(async b => {
+          const progress = await Books.getReadingProgress(b.id);
+          return { ...b, progress: progress?.progress_pct || 0 };
+        }));
+
+        grid.innerHTML = booksWithProgress.map(b => `
+          <div class="library-card">
+            <div class="library-cover">
+              <img src="${b.cover_url}" alt="${b.title}" />
+            </div>
+            <div class="library-info">
+              <div class="library-title">${UI.truncate(b.title, 40)}</div>
+              <div class="progress-container">
+                <div class="progress-header">
+                  <span>Progress</span>
+                  <span>${b.progress}%</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: ${b.progress}%"></div>
+                </div>
+              </div>
+              <div class="library-actions">
+                <button class="btn btn--primary btn--sm" onclick="openReader('${b.id}', '${b.title}', '${b.file_url}')">📖 Read</button>
+                <button class="btn btn--ghost btn--sm" onclick="handleDownload('${b.id}', '${b.file_url}')">⬇️ Download</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        UI.showError('library-grid', 'Failed to load library.');
+      }
+    }
+
+    async function openReader(id, title, url) {
+      // For purchased books, we allow full reading (no page limit)
+      Reader.open(url, title, 999999);
+      
+      // Update progress when reader closes (in real app we'd update on page turn)
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach(async (m) => {
+          if (m.target.id === 'reader-modal' && !m.target.classList.contains('open')) {
+            // Reader closed, we could save progress here
+          }
+        });
+      });
+      observer.observe(document.getElementById('reader-modal'), { attributes: true });
+    }
+
+    async function handleDownload(id, fileUrl) {
+      UI.showToast('Generating secure download...', 'info');
+      try {
+        const signedUrl = await Payments.getDownloadUrl(id, fileUrl);
+        if (signedUrl) {
+          const a = document.createElement('a');
+          a.href = signedUrl;
+          a.download = ''; // Let browser decide name or use title
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          UI.showToast('Download started!', 'success');
+        } else {
+          UI.showToast('Download failed or not allowed.', 'error');
+        }
+      } catch (e) {
+        UI.showToast('Download error.', 'error');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

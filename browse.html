@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browse Books — NexusBooks</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .browse-layout { display: grid; grid-template-columns: 260px 1fr; gap: 40px; margin-top: 40px; }
+    .filters-sidebar { position: sticky; top: calc(var(--nav-h) + 20px); height: fit-content; display: flex; flex-direction: column; gap: 30px; }
+    .filter-group { display: flex; flex-direction: column; gap: 12px; }
+    .filter-title { font-family: 'Space Grotesk', sans-serif; font-size: 1rem; font-weight: 600; color: var(--text); display: flex; align-items: center; justify-content: space-between; }
+    .filter-list { display: flex; flex-direction: column; gap: 8px; }
+    .filter-item { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; color: var(--text-2); cursor: pointer; transition: var(--tr); }
+    .filter-item:hover { color: var(--text); }
+    .filter-item input { accent-color: var(--purple); cursor: pointer; }
+    
+    .browse-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+    .browse-results-info { color: var(--text-3); font-size: 0.9rem; }
+    .sort-select { padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--text); font-size: 0.85rem; outline: none; cursor: pointer; }
+
+    @media (max-width: 900px) {
+      .browse-layout { grid-template-columns: 1fr; }
+      .filters-sidebar { display: none; } /* Mobile filter drawer would be better but keeping it simple for now */
+    }
+  </style>
+</head>
+<body>
+  <header id="navbar"></header>
+  <div id="toast-container"></div>
+
+  <main class="page">
+    <section class="section">
+      <div class="container">
+        <div class="browse-layout">
+          
+          <!-- Filters Sidebar -->
+          <aside class="filters-sidebar">
+            <div class="filter-group">
+              <div class="filter-title">Category</div>
+              <div class="filter-list" id="category-filter-list"></div>
+            </div>
+            
+            <div class="filter-group">
+              <div class="filter-title">Price Range</div>
+              <div class="filter-list">
+                <label class="filter-item"><input type="radio" name="price" value="all" checked> All Prices</label>
+                <label class="filter-item"><input type="radio" name="price" value="0"> Free</label>
+                <label class="filter-item"><input type="radio" name="price" value="0-10"> Under $10</label>
+                <label class="filter-item"><input type="radio" name="price" value="10-30"> $10 - $30</label>
+                <label class="filter-item"><input type="radio" name="price" value="30+"> $30 & Above</label>
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <div class="filter-title">Rating</div>
+              <div class="filter-list">
+                <label class="filter-item"><input type="radio" name="rating" value="0" checked> Any Rating</label>
+                <label class="filter-item"><input type="radio" name="rating" value="4"> 4★ & Up</label>
+                <label class="filter-item"><input type="radio" name="rating" value="3"> 3★ & Up</label>
+              </div>
+            </div>
+
+            <button class="btn btn--outline btn--sm" onclick="resetFilters()">Reset Filters</button>
+          </aside>
+
+          <!-- Main Content -->
+          <div class="browse-content">
+            <div class="browse-header">
+              <div class="browse-results-info" id="results-info">Showing all books</div>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <span class="text-muted" style="font-size: 0.85rem;">Sort by:</span>
+                <select class="sort-select" id="sort-select" onchange="handleFilterChange()">
+                  <option value="trending">Trending</option>
+                  <option value="newest">Newest</option>
+                  <option value="rating">Top Rated</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="books-grid books-grid--lg" id="books-grid">
+              <div class="loader"><div class="loader__ring"></div></div>
+            </div>
+
+            <div id="pagination" style="display: flex; justify-content: center; margin-top: 48px; gap: 8px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/books.js"></script>
+  <script>
+    let currentFilters = {
+      category: 'All',
+      q: '',
+      sort: 'trending',
+      minPrice: null,
+      maxPrice: null,
+      page: 0
+    };
+
+    async function init() {
+      UI.renderNavbar('browse');
+      
+      // Get URL params
+      const params = new URLSearchParams(window.location.search);
+      currentFilters.category = params.get('category') || 'All';
+      currentFilters.q = params.get('q') || '';
+      currentFilters.sort = params.get('sort') || 'trending';
+
+      // Render categories in sidebar
+      const catList = document.getElementById('category-filter-list');
+      catList.innerHTML = APP_CONFIG.categories.map(c => `
+        <label class="filter-item">
+          <input type="radio" name="category" value="${c}" ${currentFilters.category === c ? 'checked' : ''}>
+          ${c}
+        </label>
+      `).join('');
+
+      // Set sort select
+      document.getElementById('sort-select').value = currentFilters.sort;
+
+      // Add event listeners
+      document.querySelectorAll('input[type="radio"]').forEach(input => {
+        input.addEventListener('change', handleFilterChange);
+      });
+
+      await loadBooks();
+    }
+
+    async function handleFilterChange() {
+      const catInput = document.querySelector('input[name="category"]:checked');
+      const priceInput = document.querySelector('input[name="price"]:checked');
+      const ratingInput = document.querySelector('input[name="rating"]:checked');
+      
+      currentFilters.category = catInput.value;
+      currentFilters.sort = document.getElementById('sort-select').value;
+      
+      // Price range logic
+      const priceVal = priceInput.value;
+      if (priceVal === 'all') {
+        currentFilters.minPrice = null;
+        currentFilters.maxPrice = null;
+      } else if (priceVal === '0') {
+        currentFilters.minPrice = 0;
+        currentFilters.maxPrice = 0;
+      } else if (priceVal === '0-10') {
+        currentFilters.minPrice = 0;
+        currentFilters.maxPrice = 10;
+      } else if (priceVal === '10-30') {
+        currentFilters.minPrice = 10;
+        currentFilters.maxPrice = 30;
+      } else if (priceVal === '30+') {
+        currentFilters.minPrice = 30;
+        currentFilters.maxPrice = 1000000;
+      }
+
+      currentFilters.page = 0;
+      await loadBooks();
+    }
+
+    async function resetFilters() {
+      document.querySelector('input[name="category"][value="All"]').checked = true;
+      document.querySelector('input[name="price"][value="all"]').checked = true;
+      document.querySelector('input[name="rating"][value="0"]').checked = true;
+      document.getElementById('sort-select').value = 'trending';
+      currentFilters = { category: 'All', q: '', sort: 'trending', minPrice: null, maxPrice: null, page: 0 };
+      await loadBooks();
+    }
+
+    async function loadBooks() {
+      const grid = document.getElementById('books-grid');
+      UI.showLoader('books-grid');
+      
+      try {
+        const books = await Books.fetchBooks(currentFilters);
+        grid.innerHTML = books.length 
+          ? books.map(b => UI.renderBookCard(b)).join('')
+          : '<div class="empty-state"><span class="empty-state__icon">🔍</span><p>No books found matching your filters.</p></div>';
+        
+        document.getElementById('results-info').textContent = `Showing ${books.length} books ${currentFilters.q ? `for "${currentFilters.q}"` : ''}`;
+      } catch (e) {
+        UI.showError('books-grid', 'Failed to load books.');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

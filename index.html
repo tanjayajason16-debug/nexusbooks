@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NexusBooks — Digital Knowledge Marketplace</title>
+  <meta name="description" content="Discover, preview, and buy indie ebooks, student notes, coding guides, and AI-powered content on NexusBooks." />
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    /* Hero */
+    .hero{min-height:92vh;display:flex;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;padding:var(--nav-h) 24px 60px}
+    .hero__bg{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(139,92,246,.18) 0%,transparent 70%),radial-gradient(ellipse 50% 40% at 80% 80%,rgba(6,182,212,.12) 0%,transparent 60%);pointer-events:none}
+    .hero__orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;animation:orb-float 8s ease-in-out infinite}
+    .hero__orb--1{width:400px;height:400px;background:rgba(139,92,246,.12);top:-100px;left:-100px;animation-delay:0s}
+    .hero__orb--2{width:300px;height:300px;background:rgba(6,182,212,.1);bottom:-80px;right:-80px;animation-delay:-4s}
+    @keyframes orb-float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-30px) scale(1.05)}}
+    .hero__content{position:relative;z-index:1;max-width:800px}
+    .hero__eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 18px;background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.3);border-radius:var(--r-pill);font-size:.82rem;color:var(--purple);font-weight:600;margin-bottom:28px}
+    .hero__title{margin-bottom:20px}
+    .hero__sub{font-size:1.15rem;color:var(--text-2);max-width:560px;margin:0 auto 36px}
+    .hero__ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+    .hero__stats{display:flex;gap:40px;justify-content:center;margin-top:56px;padding-top:40px;border-top:1px solid var(--border)}
+    .hero__stat-num{font-family:'Space Grotesk',sans-serif;font-size:2rem;font-weight:700;background:var(--grad-text);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero__stat-label{font-size:.82rem;color:var(--text-3);margin-top:2px}
+
+    /* Categories */
+    .categories-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;padding:0 24px 48px}
+
+    /* Floating book art */
+    .hero__art{display:none}
+    @media(min-width:1100px){
+      .hero__art{display:flex;gap:20px;justify-content:center;margin-top:40px;perspective:800px}
+      .art-card{width:110px;border-radius:10px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:art-float 6s ease-in-out infinite}
+      .art-card:nth-child(2){animation-delay:-2s;transform:rotate(3deg)}
+      .art-card:nth-child(3){animation-delay:-4s;transform:rotate(-2deg)}
+      .art-card img{width:100%;display:block}
+      @keyframes art-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <header id="navbar"></header>
+  <div id="toast-container"></div>
+
+  <main class="page">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero__bg"></div>
+      <div class="hero__orb hero__orb--1"></div>
+      <div class="hero__orb hero__orb--2"></div>
+      <div class="hero__content">
+        <div class="hero__eyebrow">✨ The Digital Knowledge Marketplace</div>
+        <h1 class="hero__title">
+          Read. Learn.<br/>
+          <span class="gradient-text">Grow Without Limits.</span>
+        </h1>
+        <p class="hero__sub">Discover indie ebooks, student notes, coding guides, and AI-curated knowledge — from creators worldwide.</p>
+        <div class="hero__ctas">
+          <a href="browse.html" class="btn btn--primary btn--lg">🔍 Browse Books</a>
+          <a href="signup.html" class="btn btn--ghost btn--lg">Start Selling</a>
+        </div>
+        <div class="hero__stats">
+          <div>
+            <div class="hero__stat-num" id="stat-books">–</div>
+            <div class="hero__stat-label">Books Published</div>
+          </div>
+          <div>
+            <div class="hero__stat-num" id="stat-creators">–</div>
+            <div class="hero__stat-label">Creators</div>
+          </div>
+          <div>
+            <div class="hero__stat-num" id="stat-readers">–</div>
+            <div class="hero__stat-label">Happy Readers</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Category Pills -->
+    <div class="categories-row" id="categories-row"></div>
+
+    <!-- Trending -->
+    <section class="section section--sm animate-on-scroll">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">🔥 <span>Trending Now</span></h2>
+          <a href="browse.html?sort=trending" class="btn btn--ghost btn--sm">View All</a>
+        </div>
+        <div class="scroll-row" id="trending-row">
+          <div class="loader"><div class="loader__ring"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- New Arrivals -->
+    <section class="section section--sm animate-on-scroll">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">🆕 <span>New Arrivals</span></h2>
+          <a href="browse.html?sort=newest" class="btn btn--ghost btn--sm">View All</a>
+        </div>
+        <div class="books-grid" id="new-grid">
+          <div class="loader"><div class="loader__ring"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI Picks -->
+    <section class="section section--sm animate-on-scroll" id="ai-picks-section" style="display:none">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">🤖 <span>Recommended For You</span></h2>
+        </div>
+        <p style="color:var(--text-3);font-size:.88rem;margin-bottom:20px;">AI-powered picks based on your library</p>
+        <div class="books-grid" id="ai-picks-grid"></div>
+      </div>
+    </section>
+
+    <!-- Become a Creator CTA -->
+    <section class="section animate-on-scroll">
+      <div class="container">
+        <div class="glass" style="padding:56px 40px;text-align:center;background:linear-gradient(135deg,rgba(139,92,246,.08),rgba(6,182,212,.05));position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(139,92,246,.15),transparent 70%);pointer-events:none"></div>
+          <h2 style="position:relative;">Turn Your Knowledge<br/><span class="gradient-text">Into Income</span></h2>
+          <p style="position:relative;margin:16px auto 32px;max-width:480px;">Upload your ebooks, set your price, and reach thousands of readers. Keep 80% of every sale.</p>
+          <a href="signup.html?seller=1" class="btn btn--primary btn--lg" style="position:relative;">🚀 Start Selling Today</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Subscription Banner -->
+    <section class="section section--sm animate-on-scroll">
+      <div class="container">
+        <div class="glass" style="padding:40px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;border-color:rgba(6,182,212,.2);">
+          <div>
+            <div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;color:var(--blue);font-weight:700;margin-bottom:8px;">📚 NexusBooks Pro</div>
+            <h3>Unlimited Reading for <span class="gradient-text">$9.99/month</span></h3>
+            <p style="margin-top:8px;">Access every book in our catalogue. Cancel anytime.</p>
+          </div>
+          <button onclick="Payments.subscribe()" class="btn btn--outline btn--lg" style="flex-shrink:0;border-color:var(--blue);color:var(--blue);">Subscribe Now</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer style="border-top:1px solid var(--border);padding:40px 24px;text-align:center;color:var(--text-3);font-size:.85rem;">
+      <div style="margin-bottom:16px;">
+        <span style="font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:700;color:var(--text);">📚 NexusBooks</span>
+      </div>
+      <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;">
+        <a href="browse.html" style="color:var(--text-3)">Browse</a>
+        <a href="studio.html" style="color:var(--text-3)">Creator Studio</a>
+        <a href="library.html" style="color:var(--text-3)">Library</a>
+      </div>
+      <p>© 2025 NexusBooks. All rights reserved.</p>
+    </footer>
+
+  </main>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/books.js"></script>
+  <script src="js/payments.js"></script>
+  <script>
+    (async () => {
+      UI.renderNavbar('home');
+      UI.initScrollAnimations();
+
+      // Load categories
+      const catRow = document.getElementById('categories-row');
+      if (catRow) {
+        catRow.innerHTML = APP_CONFIG.categories.map(c =>
+          `<a href="browse.html?category=${encodeURIComponent(c)}" class="tag">${c}</a>`
+        ).join('');
+      }
+
+      // Load trending
+      try {
+        const trending = await Books.fetchTrending(10);
+        const row = document.getElementById('trending-row');
+        row.innerHTML = trending.length
+          ? trending.map(b => UI.renderBookCard({ ...b, is_trending: true })).join('')
+          : '<p class="text-muted" style="padding:20px">No trending books yet.</p>';
+      } catch { UI.showError('trending-row', 'Failed to load trending books.'); }
+
+      // Load new arrivals
+      try {
+        const newBooks = await Books.fetchNew(8);
+        const grid = document.getElementById('new-grid');
+        grid.innerHTML = newBooks.length
+          ? newBooks.map(b => UI.renderBookCard(b)).join('')
+          : '<p class="text-muted" style="padding:20px">No books yet.</p>';
+      } catch { UI.showError('new-grid', 'Failed to load new arrivals.'); }
+
+      // Stats (mock or real count)
+      try {
+        const { count: booksCount } = await supabaseClient.from('books').select('id', { count: 'exact', head: true }).eq('is_published', true);
+        const { count: creatorsCount } = await supabaseClient.from('profiles').select('id', { count: 'exact', head: true }).eq('is_seller', true);
+        document.getElementById('stat-books').textContent = (booksCount || 0).toLocaleString();
+        document.getElementById('stat-creators').textContent = (creatorsCount || 0).toLocaleString();
+        document.getElementById('stat-readers').textContent = ((booksCount || 0) * 12).toLocaleString();
+      } catch {}
+
+      // AI picks (if logged in)
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        const library = await Books.fetchUserLibrary().catch(() => []);
+        if (library.length > 0) {
+          const allBooks = await Books.fetchBooks({ limit: 40 }).catch(() => []);
+          const picks = await AI.getRecommendations(library, allBooks).catch(() => []);
+          if (picks.length) {
+            document.getElementById('ai-picks-section').style.display = '';
+            document.getElementById('ai-picks-grid').innerHTML = picks.map(b => UI.renderBookCard(b)).join('');
+          }
+        }
+      }
+    })();
+  </script>
+  <script src="js/ai.js"></script>
+</body>
+</html>
