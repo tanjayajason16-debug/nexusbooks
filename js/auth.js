@@ -65,6 +65,25 @@ const Auth = (() => {
     if (!user) return;
     const { error } = await supabaseClient.from('profiles').update(updates).eq('id', user.id);
     if (error) throw error;
+    currentProfile = { ...currentProfile, ...updates };
+  }
+
+  async function uploadAvatar(file) {
+    const user = await requireAuth();
+    if (!user) return;
+    
+    const ext = file.name.split('.').pop();
+    const path = `${user.id}.${ext}`;
+    
+    const { error } = await supabaseClient.storage.from('avatars').upload(path, file, { upsert: true });
+    if (error) throw new Error('Failed to upload avatar');
+    
+    const { data } = supabaseClient.storage.from('avatars').getPublicUrl(path);
+    // Add a cache buster so the image refreshes instantly
+    const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
+    
+    await updateProfile({ avatar_url: avatarUrl });
+    return avatarUrl;
   }
 
   async function upgradeSeller() {
@@ -72,7 +91,7 @@ const Auth = (() => {
     UI.showToast('You are now a creator!', 'success');
   }
 
-  return { init, signUp, signIn, signOut, getProfile, requireAuth, requireSeller, updateProfile, upgradeSeller,
+  return { init, signUp, signIn, signOut, getProfile, requireAuth, requireSeller, updateProfile, uploadAvatar, upgradeSeller,
     get user() { return currentUser; },
     get profile() { return currentProfile; },
   };

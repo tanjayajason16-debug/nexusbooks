@@ -90,8 +90,17 @@ const Books = (() => {
     const ext = file.name.split('.').pop();
     const path = `${bookId}/book.${ext}`;
     const { error } = await supabaseClient.storage.from(BUCKETS.files).upload(path, file, { upsert: true });
-    if (error) throw error;
+    if (error) throw new Error('Failed to upload book file');
     const { data } = supabaseClient.storage.from(BUCKETS.files).getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function uploadPreview(file, bookId) {
+    const ext = file.name.split('.').pop();
+    const path = `${Auth.user.id}/${bookId}.${ext}`;
+    const { error } = await supabaseClient.storage.from(BUCKETS.previews).upload(path, file, { upsert: true });
+    if (error) throw new Error('Failed to upload preview file');
+    const { data } = supabaseClient.storage.from(BUCKETS.previews).getPublicUrl(path);
     return data.publicUrl;
   }
 
@@ -113,6 +122,24 @@ const Books = (() => {
   }
 
   async function deleteBook(id) {
+    const user = await Auth.requireSeller();
+    if (!user) return;
+    
+    // Attempt to delete files from storage first
+    const { data: book } = await supabaseClient.from('books').select('cover_url, file_url, preview_url').eq('id', id).single();
+    if (book) {
+      try {
+        const coverName = book.cover_url?.split('/').pop();
+        if (coverName) await supabaseClient.storage.from(BUCKETS.covers).remove([`${user.user.id}/${coverName}`]);
+        const fileName = book.file_url?.split('/').pop();
+        if (fileName) await supabaseClient.storage.from(BUCKETS.files).remove([`${user.user.id}/${fileName}`]);
+        const previewName = book.preview_url?.split('/').pop();
+        if (previewName) await supabaseClient.storage.from(BUCKETS.previews).remove([`${user.user.id}/${previewName}`]);
+      } catch (e) {
+        console.warn('Failed to delete some storage files', e);
+      }
+    }
+
     const { error } = await supabaseClient.from('books').delete().eq('id', id);
     if (error) throw error;
   }
@@ -176,7 +203,7 @@ const Books = (() => {
 
   return {
     fetchBooks, fetchBook, fetchTrending, fetchNew, fetchByCategory,
-    fetchSellerBooks, uploadCover, uploadFile, createBook, updateBook, deleteBook,
+    fetchSellerBooks, uploadCover, uploadFile, uploadPreview, createBook, updateBook, deleteBook,
     fetchReviews, submitReview, hasPurchased, fetchUserLibrary,
     getReadingProgress, saveReadingProgress,
   };

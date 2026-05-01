@@ -53,14 +53,13 @@
 
         <div class="studio-layout">
           <aside class="studio-nav">
-            <div class="studio-nav-item active">Dashboard</div>
-            <div class="studio-nav-item">My Books</div>
-            <div class="studio-nav-item">Sales & Revenue</div>
-            <div class="studio-nav-item">Settings</div>
+            <div class="studio-nav-item active" onclick="switchTab('dashboard', this)">Dashboard</div>
+            <div class="studio-nav-item" onclick="switchTab('settings', this)">Settings</div>
           </aside>
 
           <div class="studio-content">
-            <div class="stats-grid">
+            <div id="tab-dashboard">
+              <div class="stats-grid">
               <div class="stat-card">
                 <div class="stat-label">Total Revenue</div>
                 <div class="stat-val" id="stat-revenue">$0.00</div>
@@ -99,6 +98,35 @@
                 </table>
               </div>
             </div>
+            </div> <!-- End tab-dashboard -->
+
+            <!-- Settings Tab -->
+            <div id="tab-settings" style="display: none;">
+              <div class="glass" style="padding: 32px;">
+                <h2 style="margin-bottom: 24px;">Profile Settings</h2>
+                <form id="settings-form" onsubmit="handleSaveSettings(event)" style="display: flex; flex-direction: column; gap: 20px; max-width: 500px;">
+                  <div class="form-group">
+                    <label class="form-label">Avatar</label>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                      <img id="settings-avatar-preview" src="" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; background: var(--surface);" />
+                      <div class="dropzone" id="avatar-dropzone" style="padding: 20px; margin: 0; flex: 1;">
+                        <span>📸 Click to upload new avatar</span>
+                        <input type="file" id="avatar-file" accept="image/*" style="display:none" />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="settings-username" name="username" class="form-input" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Bio</label>
+                    <textarea id="settings-bio" name="bio" class="form-input" rows="4" placeholder="Tell readers about yourself..."></textarea>
+                  </div>
+                  <button type="submit" class="btn btn--primary" id="save-settings-btn" style="align-self: flex-start;">Save Settings</button>
+                </form>
+              </div>
+            </div> <!-- End tab-settings -->
           </div>
         </div>
       </div>
@@ -144,12 +172,21 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">Book File (PDF/EPUB)</label>
+          <label class="form-label">Book File (Full PDF/EPUB)</label>
           <div class="dropzone" id="book-dropzone">
-            <span>📄 Click to upload book file</span>
+            <span>📄 Click to upload full book</span>
             <input type="file" id="book-file" accept=".pdf,.epub" style="display:none" />
           </div>
-          <div id="book-file-info" style="display:none; font-size:0.85rem; color:var(--green);">File selected!</div>
+          <div id="book-file-info" style="display:none; font-size:0.85rem; color:var(--green);">Full book selected!</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Preview File (Partial PDF)</label>
+          <div class="dropzone" id="preview-dropzone">
+            <span>👀 Click to upload preview excerpt</span>
+            <input type="file" id="preview-file" accept=".pdf" style="display:none" />
+          </div>
+          <div id="preview-file-info" style="display:none; font-size:0.85rem; color:var(--green);">Preview selected!</div>
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px;">
@@ -186,8 +223,60 @@
 
       setupDropzone('book-dropzone', 'book-file', (file) => {
         document.getElementById('book-file-info').style.display = 'block';
-        document.getElementById('book-file-info').textContent = `📄 ${file.name} selected`;
+        document.getElementById('book-file-info').textContent = `📄 Full Book: ${file.name}`;
       });
+
+      setupDropzone('preview-dropzone', 'preview-file', (file) => {
+        document.getElementById('preview-file-info').style.display = 'block';
+        document.getElementById('preview-file-info').textContent = `👀 Preview: ${file.name}`;
+      });
+
+      setupDropzone('avatar-dropzone', 'avatar-file', (file) => {
+        const reader = new FileReader();
+        reader.onload = e => document.getElementById('settings-avatar-preview').src = e.target.result;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function switchTab(tabId, el) {
+      document.querySelectorAll('.studio-nav-item').forEach(n => n.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('tab-dashboard').style.display = tabId === 'dashboard' ? 'block' : 'none';
+      document.getElementById('tab-settings').style.display = tabId === 'settings' ? 'block' : 'none';
+      
+      if (tabId === 'settings') {
+        document.getElementById('settings-username').value = Auth.profile.username || '';
+        document.getElementById('settings-bio').value = Auth.profile.bio || '';
+        document.getElementById('settings-avatar-preview').src = Auth.profile.avatar_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=creator';
+      }
+    }
+
+    async function handleSaveSettings(e) {
+      e.preventDefault();
+      const btn = document.getElementById('save-settings-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      
+      try {
+        const updates = {
+          username: document.getElementById('settings-username').value,
+          bio: document.getElementById('settings-bio').value
+        };
+        await Auth.updateProfile(updates);
+        
+        const avatarFile = document.getElementById('avatar-file').files[0];
+        if (avatarFile) {
+          await Auth.uploadAvatar(avatarFile);
+        }
+        
+        UI.showToast('Profile updated!', 'success');
+        UI.updateNavAuth(); // Refresh navbar avatar
+      } catch (err) {
+        UI.showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Settings';
+      }
     }
 
     async function loadDashboard() {
@@ -218,7 +307,7 @@
             <td>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn--ghost btn--sm" onclick="window.location.href='book.html?id=${b.id}'">View</button>
-                <button class="btn btn--outline btn--sm" style="border-color:var(--pink);color:var(--pink);">Delete</button>
+                <button class="btn btn--outline btn--sm" style="border-color:var(--pink);color:var(--pink);" onclick="handleDeleteBook('${b.id}')">Delete</button>
               </div>
             </td>
           </tr>
@@ -256,9 +345,10 @@
       const formData = new FormData(e.target);
       const coverFile = document.getElementById('cover-file').files[0];
       const bookFile = document.getElementById('book-file').files[0];
+      const previewFile = document.getElementById('preview-file').files[0];
 
-      if (!coverFile || !bookFile) {
-        UI.showToast('Please select both cover and book files', 'warning');
+      if (!coverFile || !bookFile || !previewFile) {
+        UI.showToast('Please select cover, full book, AND preview files', 'warning');
         return;
       }
 
@@ -277,8 +367,9 @@
         const book = await Books.createBook(bookData);
         const coverUrl = await Books.uploadCover(coverFile, book.id);
         const fileUrl = await Books.uploadFile(bookFile, book.id);
+        const previewUrl = await Books.uploadPreview(previewFile, book.id);
         
-        await Books.updateBook(book.id, { cover_url: coverUrl, file_url: fileUrl, preview_url: fileUrl }); // Preview same as file for simplicity, in real app extract pages
+        await Books.updateBook(book.id, { cover_url: coverUrl, file_url: fileUrl, preview_url: previewUrl });
 
         UI.showToast('Book published successfully!', 'success');
         toggleUploadModal(false);
@@ -288,6 +379,17 @@
       } finally {
         btn.disabled = false;
         btn.textContent = 'Upload & Publish';
+      }
+    }
+
+    async function handleDeleteBook(id) {
+      if (!confirm('Are you sure you want to delete this book? This cannot be undone.')) return;
+      try {
+        await Books.deleteBook(id);
+        UI.showToast('Book deleted successfully', 'success');
+        loadDashboard();
+      } catch (err) {
+        UI.showToast('Failed to delete book: ' + err.message, 'error');
       }
     }
 
