@@ -1,0 +1,19 @@
+{
+  "name": "nexus-books",
+  "version": "1.0.0",
+  "description": "Digital Knowledge Marketplace",
+  "scripts": {
+    "dev": "npx serve .",
+    "lint": "echo 'No linting configured for static HTML'"
+  },
+  "keywords": [
+    "ebooks",
+    "marketplace",
+    "digital-books"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
