@@ -99,8 +99,9 @@ ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
--- Profiles: Anyone can view, only owner can edit
+-- Profiles: Anyone can view, only owner can edit or insert
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
+CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 
 -- Books: Anyone can view published, only seller can edit/delete
@@ -126,5 +127,29 @@ CREATE POLICY "Users can view own reading progress" ON reading_sessions FOR SELE
 CREATE POLICY "Users can update own reading progress" ON reading_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can edit own reading progress" ON reading_sessions FOR UPDATE USING (auth.uid() = user_id);
 
--- Subscriptions: Only owner can view
+-- Users can view own subscription
 CREATE POLICY "Users can view own subscription" ON subscriptions FOR SELECT USING (auth.uid() = user_id);
+
+-- ==========================================
+-- STORAGE POLICIES
+-- ==========================================
+-- Note: You must manually create these buckets in the Supabase Dashboard:
+-- 1. book-covers (Public)
+-- 2. book-files (Private)
+-- 3. book-previews (Public)
+-- 4. avatars (Public)
+
+-- Allow public access to read files (except private book files)
+CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id IN ('book-covers', 'book-previews', 'avatars'));
+
+-- Allow authenticated users to read their own private files
+CREATE POLICY "Auth Private Read" ON storage.objects FOR SELECT USING (bucket_id = 'book-files' AND auth.role() = 'authenticated');
+
+-- Allow authenticated users to upload files
+CREATE POLICY "Auth Upload" ON storage.objects FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+-- Allow users to update their own files
+CREATE POLICY "Auth Update" ON storage.objects FOR UPDATE USING (auth.uid() = owner);
+
+-- Allow users to delete their own files
+CREATE POLICY "Auth Delete" ON storage.objects FOR DELETE USING (auth.uid() = owner);
