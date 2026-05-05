@@ -66,6 +66,7 @@
   <script src="js/payments.js"></script>
   <script>
     async function init() {
+      await Auth.init();
       UI.renderNavbar();
       
       const params = new URLSearchParams(window.location.search);

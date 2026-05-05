@@ -42,6 +42,7 @@
   <script src="js/books.js"></script>
   <script>
     async function init() {
+      await Auth.init();
       UI.renderNavbar();
       
       const params = new URLSearchParams(window.location.search);

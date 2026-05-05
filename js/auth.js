@@ -8,6 +8,9 @@ const Auth = (() => {
     if (session) {
       currentUser = session.user;
       currentProfile = await getProfile(session.user.id);
+    } else {
+      currentUser = null;
+      currentProfile = null;
     }
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       currentUser = session?.user ?? null;
@@ -38,6 +41,8 @@ const Auth = (() => {
   async function signIn(email, password) {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    currentUser = data.user;
+    currentProfile = data.user ? await getProfile(data.user.id) : null;
     return data;
   }
 
@@ -48,14 +53,24 @@ const Auth = (() => {
 
   async function requireAuth(redirect = ROUTES.login) {
     const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) { window.location.href = redirect; return null; }
-    return session.user;
+    if (!session) {
+      currentUser = null;
+      currentProfile = null;
+      window.location.href = redirect;
+      return null;
+    }
+    currentUser = session.user;
+    currentProfile = currentProfile?.id === session.user.id
+      ? currentProfile
+      : await getProfile(session.user.id);
+    return currentUser;
   }
 
   async function requireSeller() {
     const user = await requireAuth();
     if (!user) return null;
-    const profile = await getProfile(user.id);
+    const profile = currentProfile || await getProfile(user.id);
+    currentProfile = profile;
     if (!profile?.is_seller) { window.location.href = ROUTES.home; return null; }
     return { user, profile };
   }

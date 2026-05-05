@@ -1,10 +1,17 @@
 import { Resend } from 'resend';
 
-// REPLACE 're_xxxxxxxxx' WITH YOUR REAL RESEND API KEY!
-// (In a real production app, use process.env.RESEND_API_KEY instead of hardcoding)
-const resend = new Resend('re_SVvfQuGB_No2X6HJbofznL1b2zgHBGmaj');
-
 export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
+  }
+
+  if (!process.env.RESEND_API_KEY) {
+    return res.status(500).json({ success: false, error: 'Email service is not configured' });
+  }
+
+  const resend = new Resend(process.env.RESEND_API_KEY);
+
   try {
     const data = await resend.emails.send({
       from: 'onboarding@resend.dev',
@@ -12,11 +19,12 @@ export default async function handler(req, res) {
       subject: 'Hello World',
       html: '<p>Congrats on sending your <strong>first email</strong>!</p>'
     });
-    
-    // Respond with success
+
     res.status(200).json({ success: true, data });
   } catch (error) {
-    // Respond with error
-    res.status(400).json({ success: false, error });
+    res.status(400).json({
+      success: false,
+      error: error?.message || 'Failed to send email'
+    });
   }
 }

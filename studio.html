@@ -152,9 +152,7 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
           <div class="form-group">
             <label class="form-label">Category</label>
-            <select name="category" class="form-input">
-              ${APP_CONFIG.categories.slice(1).map(c => `<option value="${c}">${c}</option>`).join('')}
-            </select>
+            <select name="category" id="category-select" class="form-input"></select>
           </div>
           <div class="form-group">
             <label class="form-label">Price ($)</label>
@@ -209,6 +207,7 @@
       if (!seller) return;
       
       UI.renderNavbar('studio');
+      populateCategorySelect();
       loadDashboard();
 
       // Dropzone logic
@@ -249,6 +248,14 @@
         document.getElementById('settings-bio').value = Auth.profile.bio || '';
         document.getElementById('settings-avatar-preview').src = Auth.profile.avatar_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=creator';
       }
+    }
+
+    function populateCategorySelect() {
+      const select = document.getElementById('category-select');
+      select.innerHTML = APP_CONFIG.categories
+        .filter(c => c !== 'All')
+        .map(c => `<option value="${c}">${c}</option>`)
+        .join('');
     }
 
     async function handleSaveSettings(e) {

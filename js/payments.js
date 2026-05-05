@@ -1,40 +1,36 @@
-// NexusBooks — Payments (Stripe) & Subscriptions
+// NexusBooks payments and subscriptions
 const Payments = (() => {
-  let stripeInstance = null;
-
-  function getStripe() {
-    if (!stripeInstance) stripeInstance = Stripe(STRIPE_PUBLISHABLE_KEY);
-    return stripeInstance;
+  async function postJson(url, body, accessToken) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Request failed');
+    return json;
   }
 
-  // Single book purchase — redirects to Stripe Checkout
   async function buyBook(book) {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) { window.location.href = ROUTES.login; return; }
 
-    UI.showToast('Redirecting to checkout…', 'info');
-
-    // Store pending purchase in Supabase for webhook confirmation
-    await supabaseClient.from('pending_purchases').insert({
-      buyer_id: session.user.id,
-      book_id: book.id,
-      amount: book.price,
-    });
-
-    // In production this would call your backend /api/checkout
-    // For demo: use Stripe Payment Links or direct Payment Intent
-    const stripe = getStripe();
-    const { error } = await stripe.redirectToCheckout({
-      lineItems: [{ price: book.stripe_price_id, quantity: 1 }],
-      mode: 'payment',
-      successUrl: `${window.location.origin}/library.html?success=1&book=${book.id}`,
-      cancelUrl: `${window.location.origin}/book.html?id=${book.id}`,
-      customerEmail: session.user.email,
-    });
-    if (error) UI.showToast(error.message, 'error');
+    UI.showToast('Redirecting to checkout...', 'info');
+    try {
+      const { url } = await postJson('/api/create-checkout-session', {
+        bookId: book.id,
+        successUrl: `${window.location.origin}/library.html?success=1&book=${book.id}`,
+        cancelUrl: `${window.location.origin}/book.html?id=${book.id}`,
+      }, session.access_token);
+      window.location.href = url;
+    } catch (error) {
+      UI.showToast(error.message, 'error');
+    }
   }
 
-  // Free book — insert purchase directly
   async function claimFree(bookId) {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) { window.location.href = ROUTES.login; return; }
@@ -50,19 +46,18 @@ const Payments = (() => {
     setTimeout(() => window.location.href = ROUTES.library, 1200);
   }
 
-  // Subscription
   async function subscribe() {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) { window.location.href = ROUTES.login; return; }
-    const stripe = getStripe();
-    const { error } = await stripe.redirectToCheckout({
-      lineItems: [{ price: APP_CONFIG.subscriptionPriceId, quantity: 1 }],
-      mode: 'subscription',
-      successUrl: `${window.location.origin}/library.html?subscribed=1`,
-      cancelUrl: `${window.location.origin}/index.html`,
-      customerEmail: session.user.email,
-    });
-    if (error) UI.showToast(error.message, 'error');
+    try {
+      const { url } = await postJson('/api/create-subscription-session', {
+        successUrl: `${window.location.origin}/library.html?subscribed=1`,
+        cancelUrl: `${window.location.origin}/index.html`,
+      }, session.access_token);
+      window.location.href = url;
+    } catch (error) {
+      UI.showToast(error.message, 'error');
+    }
   }
 
   async function checkSubscription() {
@@ -84,20 +79,17 @@ const Payments = (() => {
     return { total, transactions: data || [] };
   }
 
-  // Generate a signed (time-limited) download URL
   async function getDownloadUrl(bookId, fileUrl) {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) return null;
-    // Verify ownership
     const purchased = await Books.hasPurchased(bookId);
     const sub = await checkSubscription();
     if (!purchased && !sub) return null;
 
-    // Extract storage path from public URL
     const pathMatch = fileUrl.match(/book-files\/(.+)/);
     if (!pathMatch) return fileUrl;
     const { data } = await supabaseClient.storage.from(BUCKETS.files)
-      .createSignedUrl(pathMatch[1], 3600); // 1 hour expiry
+      .createSignedUrl(pathMatch[1].split('?')[0], 3600);
     return data?.signedUrl || null;
   }
 

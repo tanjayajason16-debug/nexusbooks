@@ -97,7 +97,9 @@ const Books = (() => {
 
   async function uploadPreview(file, bookId) {
     const ext = file.name.split('.').pop();
-    const path = `${Auth.user.id}/${bookId}.${ext}`;
+    const ownerId = Auth.user?.id || (await supabaseClient.auth.getSession()).data.session?.user.id;
+    if (!ownerId) throw new Error('Not authenticated');
+    const path = `${ownerId}/${bookId}.${ext}`;
     const { error } = await supabaseClient.storage.from(BUCKETS.previews).upload(path, file, { upsert: true });
     if (error) throw new Error('Failed to upload preview file');
     const { data } = supabaseClient.storage.from(BUCKETS.previews).getPublicUrl(path);
@@ -109,7 +111,14 @@ const Books = (() => {
     if (!session) throw new Error('Not authenticated');
     const { data, error } = await supabaseClient
       .from('books')
-      .insert({ ...bookData, seller_id: session.user.id, is_published: false, rating_avg: 0, downloads: 0, trending_score: 0 })
+      .insert({
+        ...bookData,
+        seller_id: session.user.id,
+        is_published: bookData.is_published ?? false,
+        rating_avg: 0,
+        downloads: 0,
+        trending_score: 0
+      })
       .select()
       .single();
     if (error) throw error;
@@ -129,12 +138,12 @@ const Books = (() => {
     const { data: book } = await supabaseClient.from('books').select('cover_url, file_url, preview_url').eq('id', id).single();
     if (book) {
       try {
-        const coverName = book.cover_url?.split('/').pop();
-        if (coverName) await supabaseClient.storage.from(BUCKETS.covers).remove([`${user.user.id}/${coverName}`]);
-        const fileName = book.file_url?.split('/').pop();
-        if (fileName) await supabaseClient.storage.from(BUCKETS.files).remove([`${user.user.id}/${fileName}`]);
-        const previewName = book.preview_url?.split('/').pop();
-        if (previewName) await supabaseClient.storage.from(BUCKETS.previews).remove([`${user.user.id}/${previewName}`]);
+        const coverPath = storagePathFromUrl(book.cover_url, BUCKETS.covers);
+        if (coverPath) await supabaseClient.storage.from(BUCKETS.covers).remove([coverPath]);
+        const filePath = storagePathFromUrl(book.file_url, BUCKETS.files);
+        if (filePath) await supabaseClient.storage.from(BUCKETS.files).remove([filePath]);
+        const previewPath = storagePathFromUrl(book.preview_url, BUCKETS.previews);
+        if (previewPath) await supabaseClient.storage.from(BUCKETS.previews).remove([previewPath]);
       } catch (e) {
         console.warn('Failed to delete some storage files', e);
       }
@@ -142,6 +151,14 @@ const Books = (() => {
 
     const { error } = await supabaseClient.from('books').delete().eq('id', id);
     if (error) throw error;
+  }
+
+  function storagePathFromUrl(url, bucket) {
+    if (!url) return null;
+    const marker = `/${bucket}/`;
+    const index = url.indexOf(marker);
+    if (index === -1) return null;
+    return decodeURIComponent(url.slice(index + marker.length).split('?')[0]);
   }
 
   async function fetchReviews(bookId) {

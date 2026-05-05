@@ -43,7 +43,8 @@ CREATE TABLE purchases (
   stripe_payment_id TEXT,
   watermark_token UUID DEFAULT gen_random_uuid(),
   allow_download BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  UNIQUE(buyer_id, book_id)
 );
 
 -- 4. REVIEWS
@@ -98,6 +99,7 @@ ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pending_purchases ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: Anyone can view, only owner can edit or insert
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
@@ -116,7 +118,17 @@ CREATE POLICY "Users can view own purchases" ON purchases FOR SELECT USING (auth
 CREATE POLICY "Sellers can view purchases of their books" ON purchases FOR SELECT USING (
   auth.uid() IN (SELECT seller_id FROM books WHERE id = purchases.book_id)
 );
-CREATE POLICY "System can insert purchases" ON purchases FOR INSERT WITH CHECK (true); -- Usually handled via service role or secure function
+CREATE POLICY "Users can claim free published books" ON purchases FOR INSERT WITH CHECK (
+  auth.uid() = buyer_id
+  AND amount = 0
+  AND stripe_payment_id IS NULL
+  AND EXISTS (
+    SELECT 1 FROM books
+    WHERE books.id = purchases.book_id
+      AND books.is_published = true
+      AND books.price = 0
+  )
+);
 
 -- Reviews: Anyone can view, only buyer can insert
 CREATE POLICY "Reviews are viewable by everyone" ON reviews FOR SELECT USING (true);
@@ -130,6 +142,20 @@ CREATE POLICY "Users can edit own reading progress" ON reading_sessions FOR UPDA
 -- Users can view own subscription
 CREATE POLICY "Users can view own subscription" ON subscriptions FOR SELECT USING (auth.uid() = user_id);
 
+-- Pending purchases: users can only prepare their own checkout for a published paid book.
+-- Paid purchases should be finalized only by a server-side webhook using the service role key.
+CREATE POLICY "Users can view own pending purchases" ON pending_purchases FOR SELECT USING (auth.uid() = buyer_id);
+CREATE POLICY "Users can create own pending purchases" ON pending_purchases FOR INSERT WITH CHECK (
+  auth.uid() = buyer_id
+  AND amount > 0
+  AND EXISTS (
+    SELECT 1 FROM books
+    WHERE books.id = pending_purchases.book_id
+      AND books.is_published = true
+      AND books.price = pending_purchases.amount
+  )
+);
+
 -- ==========================================
 -- STORAGE POLICIES
 -- ==========================================
@@ -142,11 +168,45 @@ CREATE POLICY "Users can view own subscription" ON subscriptions FOR SELECT USIN
 -- Allow public access to read files (except private book files)
 CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id IN ('book-covers', 'book-previews', 'avatars'));
 
--- Allow authenticated users to read their own private files
-CREATE POLICY "Auth Private Read" ON storage.objects FOR SELECT USING (bucket_id = 'book-files' AND auth.role() = 'authenticated');
+-- Private book files are readable only by the seller, buyers, or active subscribers.
+CREATE POLICY "Entitled Private Book File Read" ON storage.objects FOR SELECT USING (
+  bucket_id = 'book-files'
+  AND (
+    EXISTS (
+      SELECT 1 FROM books
+      WHERE books.id::text = (storage.foldername(name))[1]
+        AND books.seller_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1 FROM purchases
+      WHERE purchases.book_id::text = (storage.foldername(name))[1]
+        AND purchases.buyer_id = auth.uid()
+        AND purchases.allow_download = true
+    )
+    OR EXISTS (
+      SELECT 1 FROM subscriptions
+      WHERE subscriptions.user_id = auth.uid()
+        AND subscriptions.status = 'active'
+        AND (subscriptions.current_period_end IS NULL OR subscriptions.current_period_end > NOW())
+    )
+  )
+);
 
--- Allow authenticated users to upload files
-CREATE POLICY "Auth Upload" ON storage.objects FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+-- Public asset buckets can be written by authenticated users.
+CREATE POLICY "Authenticated Public Asset Upload" ON storage.objects FOR INSERT WITH CHECK (
+  auth.role() = 'authenticated'
+  AND bucket_id IN ('book-covers', 'book-previews', 'avatars')
+);
+
+-- Full book files can only be uploaded by the seller who owns the matching book id folder.
+CREATE POLICY "Seller Private Book File Upload" ON storage.objects FOR INSERT WITH CHECK (
+  bucket_id = 'book-files'
+  AND EXISTS (
+    SELECT 1 FROM books
+    WHERE books.id::text = (storage.foldername(name))[1]
+      AND books.seller_id = auth.uid()
+  )
+);
 
 -- Allow users to update their own files
 CREATE POLICY "Auth Update" ON storage.objects FOR UPDATE USING (auth.uid() = owner);

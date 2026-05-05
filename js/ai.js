@@ -1,22 +1,17 @@
-// NexusBooks — Gemini AI (Summaries & Recommendations)
+// NexusBooks AI summaries and recommendations
 const AI = (() => {
-
   async function callGemini(prompt) {
-    const res = await fetch(GEMINI_API_URL, {
+    const res = await fetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
-      })
+      body: JSON.stringify({ prompt }),
     });
-    if (!res.ok) throw new Error('Gemini API error');
-    const json = await res.json();
-    return json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Gemini API error');
+    return json.text || '';
   }
 
   async function getBookSummary(bookId, title, description) {
-    // Check cache first
     const { data: cached } = await supabaseClient.from('books')
       .select('ai_summary').eq('id', bookId).single();
     if (cached?.ai_summary) return cached.ai_summary;
@@ -28,7 +23,6 @@ Description: "${description}"
 
 Summary:`;
     const summary = await callGemini(prompt);
-    // Cache it
     await supabaseClient.from('books').update({ ai_summary: summary }).eq('id', bookId);
     return summary;
   }

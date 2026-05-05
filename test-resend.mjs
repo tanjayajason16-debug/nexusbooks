@@ -1,6 +1,11 @@
 import { Resend } from 'resend';
 
-const resend = new Resend('re_SVvfQuGB_No2X6HJbofznL1b2zgHBGmaj');
+if (!process.env.RESEND_API_KEY) {
+  console.error('Missing RESEND_API_KEY environment variable.');
+  process.exit(1);
+}
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function test() {
   try {
